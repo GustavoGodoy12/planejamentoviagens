@@ -2,9 +2,9 @@
 import os, glob, shutil
 import kagglehub
 
-DATASET = "bertnardomariouskono/bali-tourist-attractions-dataset-from-google-maps"
+DATASET = "ziya07/dynamic-tourism-route-dataset-dtrd"
 DEST_DIR = "sample_data"
-DEST_FILE = "bali.csv"
+DEST_FILE = "dynamic.csv"
 
 os.makedirs(DEST_DIR, exist_ok=True)
 

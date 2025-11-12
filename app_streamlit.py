@@ -1,98 +1,66 @@
-
 import streamlit as st
 import pandas as pd
-import numpy as np
-from data_prep import clean_and_standardize, build_distance_time_matrices, compute_value_column
+import matplotlib.pyplot as plt
+from data_prep import load_dynamic_csv, clean_dynamic
 from eda import eda_summary, eda_plots
-from heuristics import greedy_itinerary
-from bnb import branch_and_bound
+from model import train_and_eval, feature_importance
+from recommender import recommend, pareto_frontier
 
-st.set_page_config(page_title="Itinerário Econômico (Branch & Bound)", layout="wide")
+st.set_page_config(page_title="Recomendador de Rotas Dinâmicas", layout="wide")
+st.title("Recomendador de Rotas Dinâmicas")
 
-st.title("Planejamento de Viagens — Itinerário mais econômico (Branch & Bound)")
+with st.sidebar:
+    st.header("Dados")
+    uploaded = st.file_uploader("Envie o dynamic.csv", type=["csv"])
+    st.header("Filtros")
+    max_duration = st.number_input("Duração máxima (min)", value=0, min_value=0)
+    max_cost = st.number_input("Custo máximo", value=0, min_value=0)
+    budget = st.selectbox("Budget", ["Any","Low","Medium","High"])
+    st.header("Cenário do Usuário")
+    weather = st.text_input("Weather")
+    traffic = st.text_input("Traffic_Level")
+    crowd = st.text_input("Crowd_Density")
+    event = st.text_input("Event_Impact")
+    theme = st.text_input("Preferred_Theme")
+    transport = st.text_input("Preferred_Transport")
+    topk = st.slider("Top-K recomendações", 1, 30, 10)
+    run = st.button("Treinar e Recomendar")
 
-st.sidebar.header("1) Dados")
-uploaded = st.sidebar.file_uploader("CSV de pontos turísticos (Kaggle ou próprio)", type=["csv"])
-lat0 = st.sidebar.number_input("Latitude do hotel/depot", value=-8.4095, format="%.6f")
-lon0 = st.sidebar.number_input("Longitude do hotel/depot", value=115.1889, format="%.6f")
-sample_n = st.sidebar.slider("Amostra de POIs (para demo/perf)", min_value=5, max_value=100, value=20, step=1)
-
-st.sidebar.header("2) Parâmetros do Modelo")
-speed = st.sidebar.slider("Velocidade média (km/h)", 5, 80, 30, 1)
-time_limit = st.sidebar.slider("Tempo total (min)", 60, 720, 480, 10)
-w_rating = st.sidebar.slider("Peso rating", 0.0, 2.0, 1.0, 0.1)
-w_cost = st.sidebar.slider("Peso custo (penaliza)", 0.0, 2.0, 0.0, 0.1)
-
-st.sidebar.header("3) Execução Branch & Bound")
-max_nodes = st.sidebar.number_input("Máx. nós", value=50000, step=1000)
-time_cap = st.sidebar.number_input("Limite de tempo (s) (0=sem)", value=0, step=1)
-if time_cap <= 0:
-    time_cap = None
-
-run = st.sidebar.button("Rodar Pipeline")
-
-if uploaded is not None:
-    raw = pd.read_csv(uploaded)
-    df, decisions = clean_and_standardize(raw)
-    if len(df) > sample_n:
-        df = df.sample(sample_n, random_state=42).reset_index(drop=True)
-
-    st.subheader("Dados carregados (amostra)")
-    st.dataframe(df.head(20))
-
-    st.subheader("Mapa (POIs)")
-    st.map(df.rename(columns={"latitude":"lat","longitude":"lon"})[["lat","lon"]])
-
-    st.subheader("EDA Rápida")
-    summary = eda_summary(df)
-    col1, col2 = st.columns(2)
-    with col1:
-        st.write("**Dimensões**:", summary["shape"])
-        st.write("**Tipos**:", summary["dtypes"])
-        st.write("**Ausentes (%)**:", {k: round(v*100,2) for k,v in summary["missing_ratio"].items()})
-    with col2:
-        p1, p2, p3, p4 = eda_plots(df)
-        st.image([p1, p2, p3, p4], caption=["Hist rating", "Hist tempo visita", "Box price", "Scatter preço x rating"])
-
-    df["value"] = compute_value_column(df, w_rating, w_cost)
-    D, T, points = build_distance_time_matrices(df, lat0, lon0, speed)
-
-    values = np.array([0.0] + df["value"].tolist())
-    visit_time = np.array([0.0] + df["est_time_min"].tolist())
-
-    st.subheader("Matriz — Info básica")
-    st.write(f"Pontos (inclui 0=hotel): {len(points)}")
-    st.write("Exemplo de tempos (min):")
-    st.dataframe(pd.DataFrame(T[:5,:5]).round(1))
-
-    st.subheader("Heurística Gulosa (baseline)")
-    greedy = greedy_itinerary(values, visit_time, T, time_limit)
-    st.write(greedy)
-    st.write("Rota gulosa (nomes):")
-    st.write(points.loc[greedy["route"], "name"].tolist())
-
-    if run:
-        st.subheader("Branch & Bound — Execução")
-        with st.spinner("Executando..."):
-            res = branch_and_bound(values, visit_time, T, time_limit,
-                                   max_nodes=int(max_nodes), time_cap_seconds=time_cap)
-        st.success("Concluído!")
-        st.write(res)
-        st.write("**Rota ótima (nomes):**")
-        st.write(points.loc[res["best_route"], "name"].tolist())
-
-        st.subheader("Comparação")
-        st.write({
-            "Greedy_value": greedy["total_value"],
-            "Greedy_time": round(greedy["total_time"],2),
-            "BnB_value": res["best_value"],
-            "BnB_time": round(res["best_time"],2)
-        })
-
-        st.subheader("Sensibilidade (slider interativo já serve)")
-        st.info("Ajuste *Tempo total*, *Velocidade*, *Pesos* no menu e execute novamente para observar a sensibilidade.")
-
-        st.subheader("Visualização contextual")
-        st.map(points.rename(columns={"latitude":"lat","longitude":"lon"})[["lat","lon"]])
+if uploaded is None:
+    st.info("Aguardando CSV.")
 else:
-    st.info("Faça upload de um CSV para começar. Sugestão: dataset de atrações de Bali no Kaggle (tem latitude/longitude).")
+    raw = load_dynamic_csv(uploaded)
+    df = clean_dynamic(raw)
+    st.subheader("Amostra dos dados")
+    st.dataframe(df.head(20))
+    st.subheader("Resumo")
+    st.json(eda_summary(df))
+    p1, p2, p3, p4 = eda_plots(df)
+    st.subheader("Gráficos")
+    st.image([p1, p2, p3, p4], caption=["Duração","Custo","Satisfação por Clima","Duração por Tráfego"])
+    if run:
+        with st.spinner("Treinando modelo..."):
+            tr = train_and_eval(df)
+        st.success("Modelo treinado")
+        st.write(tr["metrics"])
+        imp = feature_importance(tr["model"], tr["X_test"], tr["y_test"])
+        st.subheader("Importância dos atributos")
+        st.dataframe(imp.head(20))
+        constraints = {"max_duration": None if max_duration==0 else max_duration, "max_cost": None if max_cost==0 else max_cost, "budget": budget}
+        overrides = {"Weather": weather if weather else None, "Traffic_Level": traffic if traffic else None, "Crowd_Density": crowd if crowd else None, "Event_Impact": event if event else None, "Preferred_Theme": theme if theme else None, "Preferred_Transport": transport if transport else None}
+        rec = recommend(df, tr["model"], constraints, overrides, top_k=topk)
+        st.subheader("Recomendações")
+        if len(rec):
+            st.dataframe(rec.reset_index(drop=True))
+            st.download_button("Baixar recomendações CSV", data=rec.to_csv(index=False).encode("utf-8"), file_name="recommendations.csv", mime="text/csv")
+            st.subheader("Trade-off Custo × Duração (fronteira de Pareto)")
+            fr, dom = pareto_frontier(rec, x_col="Total_Cost", y_col="Total_Duration", score_col="Predicted_Satisfaction")
+            fig = plt.figure()
+            plt.scatter(dom["Total_Cost"], dom["Total_Duration"], alpha=0.5)
+            if len(fr):
+                plt.plot(fr["Total_Cost"], fr["Total_Duration"], marker="o")
+            plt.xlabel("Total_Cost")
+            plt.ylabel("Total_Duration")
+            st.pyplot(fig)
+        else:
+            st.warning("Nenhuma rota atende aos filtros.")

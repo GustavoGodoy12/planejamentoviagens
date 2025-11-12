@@ -1,117 +1,66 @@
-
 from __future__ import annotations
 import pandas as pd
 import numpy as np
-from typing import Tuple, Dict
 
-EARTH_R = 6371000.0  # metros
+CATS = ["Weather","Traffic_Level","Crowd_Density","Event_Impact","Optimal_Route_Preference","Gender","Nationality","Travel_Companions","Budget_Category","Preferred_Theme","Preferred_Transport"]
+NUMS = ["Total_Duration","Total_Cost","Age","User_ID"]
+TARGET = "Satisfaction_Score"
+IDCOLS = ["Route_ID","Sequence"]
 
-def haversine_m(lat1, lon1, lat2, lon2) -> float:
-   
-    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = np.sin(dlat/2.0)**2 + np.cos(lat1)*np.cos(lat2)*np.sin(dlon/2.0)**2
-    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
-    return EARTH_R * c
+def load_dynamic_csv(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    if "Route_ID" not in df.columns:
+        raise ValueError("CSV inválido para schema dynamic.csv")
+    return df
 
-def clean_and_standardize(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
-    
-    decisions = {}
-
-
-    cols = {c.lower(): c for c in df.columns}
-    def pick(*names):
-        for n in names:
-            for k, orig in cols.items():
-                if n == k:
-                    return orig
-        return None
-
-    rename = {}
-    candidates = {
-    "name": ["name", "title", "poi_name", "nama"],
-    "latitude": ["latitude", "lat", "y"],
-    "longitude": ["longitude", "lon", "lng", "x"],
-    "rating": ["rating", "score", "stars"],
-    "price_level": ["price_level", "price", "cost_level"],
-    "est_time_min": ["est_time_min", "duration_min", "visit_time_min"]
-}
-    for std, opts in candidates.items():
-        col = pick(*opts)
-        if col:
-            rename[col] = std
-    df = df.rename(columns=rename)
-
-    
-    required = ["name", "latitude", "longitude"]
-    for r in required:
-        if r not in df.columns:
-            raise ValueError(f"CSV precisa conter coluna '{r}' (pode renomear no arquivo).")
-
-
-    df["name"] = df["name"].astype(str)
-    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
-
-
-    before = len(df)
-    df = df.dropna(subset=["latitude", "longitude"]).drop_duplicates(subset=["name","latitude","longitude"])
-    decisions["rows_removed"] = int(before - len(df))
-
-    if "rating" not in df.columns:
-        df["rating"] = 4.0
-        decisions["rating_filled_default"] = 4.0
+def clean_dynamic(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for c in NUMS:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    for c in CATS + IDCOLS + [TARGET]:
+        if c in df.columns:
+            df[c] = df[c].astype(str)
+    if TARGET in df.columns:
+        df[TARGET] = pd.to_numeric(df[TARGET], errors="coerce")
+    df = df.dropna(subset=["Total_Duration","Total_Cost"])
+    if TARGET in df.columns:
+        df = df.dropna(subset=[TARGET])
+    df["Total_Duration"] = df["Total_Duration"].clip(lower=1)
+    df["Total_Cost"] = df["Total_Cost"].clip(lower=0)
+    if "Age" in df.columns:
+        df["Age"] = pd.to_numeric(df["Age"], errors="coerce").fillna(df["Age"].median())
     else:
-        df["rating"] = pd.to_numeric(df["rating"], errors="coerce").fillna(4.0)
+        df["Age"] = 40
+    if "User_ID" not in df.columns:
+        df["User_ID"] = 0
+    for c in CATS:
+        if c not in df.columns:
+            df[c] = "Unknown"
+        df[c] = df[c].fillna("Unknown").astype(str).str.strip()
+        df[c] = df[c].replace({"": "Unknown", "nan": "Unknown", "NaN": "Unknown", "None": "Unknown"})
+    if "Sequence" not in df.columns:
+        df["Sequence"] = ""
+    return df
 
-    if "price_level" not in df.columns:
-        df["price_level"] = 1.0
-        decisions["price_level_default"] = 1.0
-    else:
-        df["price_level"] = pd.to_numeric(df["price_level"], errors="coerce").fillna(1.0)
+def split_features(df: pd.DataFrame):
+    X = df[NUMS + CATS]
+    y = df[TARGET]
+    return X, y
 
-    if "est_time_min" not in df.columns:
-        df["est_time_min"] = 60.0
-        decisions["est_time_min_default"] = 60.0
-    else:
-        df["est_time_min"] = pd.to_numeric(df["est_time_min"], errors="coerce").fillna(60.0)
+def filter_constraints(df: pd.DataFrame, max_duration: float | None, max_cost: float | None, budget: str | None) -> pd.DataFrame:
+    g = df.copy()
+    if max_duration is not None:
+        g = g[g["Total_Duration"] <= max_duration]
+    if max_cost is not None:
+        g = g[g["Total_Cost"] <= max_cost]
+    if budget and budget != "Any" and "Budget_Category" in g.columns:
+        g = g[g["Budget_Category"] == budget]
+    return g
 
-  
-    df["rating"] = df["rating"].clip(0, 5)
-    df["price_level"] = df["price_level"].clip(lower=0)
-    df["est_time_min"] = df["est_time_min"].clip(lower=5)
-
-  
-    df = df.reset_index(drop=True)
-    df.insert(0, "poi_id", np.arange(1, len(df)+1))  # reserva 0 para o hotel
-    return df, decisions
-
-def build_distance_time_matrices(df: pd.DataFrame,
-                                 start_lat: float, start_lon: float,
-                                 speed_kmh: float = 30.0) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
-    """
-    Constrói matriz de distâncias (m) e tempos (min) incluindo o nó 0 = hotel/depot.
-    """
-    points = pd.concat([
-        pd.DataFrame([{"poi_id": 0, "name": "Hotel/Depósito", "latitude": start_lat, "longitude": start_lon,
-                       "rating": 0.0, "price_level": 0.0, "est_time_min": 0.0}]),
-        df[["poi_id","name","latitude","longitude","rating","price_level","est_time_min"]]
-    ], ignore_index=True)
-
-    n = len(points)
-    D = np.zeros((n, n), dtype=float)  
-    for i in range(n):
-        D[i, :] = haversine_m(points.loc[i, "latitude"], points.loc[i, "longitude"],
-                              points["latitude"].values, points["longitude"].values)
-
-    speed_mps = (speed_kmh * 1000.0) / 3600.0
-    T = (D / speed_mps) / 60.0  
-
-    return D, T, points
-
-def compute_value_column(df: pd.DataFrame, w_rating: float = 1.0, w_cost: float = 0.0) -> pd.Series:
-    """
-    Valor = w_rating * rating - w_cost * price_level
-    """
-    return w_rating * df["rating"].astype(float) - w_cost * df["price_level"].astype(float)
+def to_recommendation_table(df: pd.DataFrame, preds: np.ndarray) -> pd.DataFrame:
+    out = df.copy()
+    out["Predicted_Satisfaction"] = preds
+    cols = ["Route_ID","User_ID","Sequence","Total_Duration","Total_Cost","Weather","Traffic_Level","Crowd_Density","Event_Impact","Preferred_Theme","Preferred_Transport","Budget_Category","Satisfaction_Score","Predicted_Satisfaction"]
+    cols = [c for c in cols if c in out.columns]
+    return out[cols].sort_values("Predicted_Satisfaction", ascending=False)

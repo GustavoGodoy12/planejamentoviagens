@@ -1,0 +1,11 @@
+Route_ID,User_ID,Sequence,Total_Duration,Total_Cost,Weather,Traffic_Level,Crowd_Density,Event_Impact,Preferred_Theme,Preferred_Transport,Budget_Category,Satisfaction_Score,Predicted_Satisfaction
+1000,14,23->48->21->46,377,1579,Rainy,Medium,High,Unknown,Shopping,Taxi,Low,5,3.8833333333333333
+170,16,23->25->24->32,365,1396,Rainy,Medium,Low,Unknown,Relaxation,Walk,Low,5,3.78
+456,57,23->14->49->39->21->2,440,568,Rainy,Medium,Medium,Festival,Nature,Bike,Low,5,3.69
+899,6,10->28->37,255,1481,Sunny,High,High,Festival,Adventure,Bus,Low,4,3.6533333333333333
+654,167,17->42->7->50->48->40,187,1266,Sunny,Low,Low,Unknown,Nature,Car,Low,5,3.5933333333333333
+683,66,25->49->19->40->22->8,155,1640,Sunny,Medium,Medium,Festival,Relaxation,Bike,Low,5,3.5866666666666664
+803,37,12->32->22->3->44->6->40,314,708,Sunny,High,Medium,Holiday,Shopping,Walk,Low,3,3.546666666666667
+167,178,38->34->25->22,188,1561,Rainy,High,Medium,Holiday,Food,Walk,Low,5,3.46
+953,110,13->31->9,373,1108,Cloudy,Low,Low,Unknown,Food,Car,Low,5,3.42
+1170,142,1->30->35->48->29,338,700,Sunny,High,High,Unknown,Shopping,Car,Low,5,3.4066666666666667
