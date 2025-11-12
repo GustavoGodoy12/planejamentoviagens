@@ -1,4 +1,4 @@
-# main.py
+
 import argparse
 import pandas as pd
 from data_prep import clean_and_standardize, build_distance_time_matrices, compute_value_column
@@ -27,37 +27,37 @@ def main():
     if args.sample_n and len(df) > args.sample_n:
         df = df.sample(args.sample_n, random_state=42).reset_index(drop=True)
 
-    # EDA
+
     summary = eda_summary(df)
-    print("=== EDA: resumo ===")
+    print(" EDA: resumo ")
     print(summary)
     eda_plots(df)
 
-    # valor
+
     df["value"] = compute_value_column(df, args.w_rating, args.w_cost)
 
-    # matrizes
+
     D, T, points = build_distance_time_matrices(df, args.lat0, args.lon0, args.speed_kmh)
 
-    # arrays alinhados a points (inclui nó 0)
+
     values = [0.0] + df["value"].tolist()
     visit_time = [0.0] + df["est_time_min"].tolist()
     values = pd.Series(values).to_numpy()
     visit_time = pd.Series(visit_time).to_numpy()
 
-    # heurística baseline
+
     greedy = greedy_itinerary(values, visit_time, T, args.time_limit)
-    print("\n=== Heurística Gulosa ===")
+    print("\n Heurística Gulosa ")
     print(greedy)
 
     # B&B
     bnb_res = branch_and_bound(values, visit_time, T, args.time_limit,
                                max_nodes=args.max_nodes, time_cap_seconds=args.time_cap)
-    print("\n=== Branch and Bound ===")
+    print("\nBranch and Bound ")
     print(bnb_res)
 
     # Comparação
-    print("\n=== Comparação ===")
+    print("\nComparação ")
     print({"Greedy_value": greedy["total_value"], "B&B_value": bnb_res["best_value"]})
     print("Rota B&B (ids em 'points'):", bnb_res["best_route"])
     print(points.loc[bnb_res["best_route"], ["name","latitude","longitude"]].reset_index(drop=True))

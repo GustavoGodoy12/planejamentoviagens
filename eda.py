@@ -1,4 +1,4 @@
-# eda.py
+
 from __future__ import annotations
 import pandas as pd
 import numpy as np
@@ -7,13 +7,13 @@ import seaborn as sns
 from typing import Dict, Any, Tuple
 
 def eda_summary(df: pd.DataFrame) -> Dict[str, Any]:
-    # Seleciona colunas numéricas explicitamente (compatível com qualquer pandas)
+
     num_df = df.select_dtypes(include=["number"])
     summary = {
         "shape": df.shape,
         "dtypes": df.dtypes.astype(str).to_dict(),
         "missing_ratio": (df.isna().mean()).to_dict(),
-        "describe": num_df.describe().to_dict()  # <- sem numeric_only
+        "describe": num_df.describe().to_dict()  
     }
     return summary
 

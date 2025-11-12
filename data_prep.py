@@ -1,13 +1,13 @@
-# data_prep.py
+
 from __future__ import annotations
 import pandas as pd
 import numpy as np
 from typing import Tuple, Dict
 
-EARTH_R = 6371000.0  # meters
+EARTH_R = 6371000.0  # metros
 
 def haversine_m(lat1, lon1, lat2, lon2) -> float:
-    """Distância Haversine em metros."""
+   
     lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
     dlat = lat2 - lat1
     dlon = lon2 - lon1
@@ -16,16 +16,10 @@ def haversine_m(lat1, lon1, lat2, lon2) -> float:
     return EARTH_R * c
 
 def clean_and_standardize(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
-    """
-    Limpeza e padronização mínima:
-    - renomeia colunas para ['name','latitude','longitude','rating','price_level','est_time_min']
-    - remove duplicatas e NaNs críticos
-    - preenche defaults
-    Retorna dataframe e dicionário de decisões.
-    """
+    
     decisions = {}
 
-    # Renomear prováveis colunas
+
     cols = {c.lower(): c for c in df.columns}
     def pick(*names):
         for n in names:
@@ -49,23 +43,22 @@ def clean_and_standardize(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str
             rename[col] = std
     df = df.rename(columns=rename)
 
-    # Garantir colunas mínimas
+    
     required = ["name", "latitude", "longitude"]
     for r in required:
         if r not in df.columns:
             raise ValueError(f"CSV precisa conter coluna '{r}' (pode renomear no arquivo).")
 
-    # Tipos
+
     df["name"] = df["name"].astype(str)
     df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
 
-    # Remover inválidos/duplicatas
+
     before = len(df)
     df = df.dropna(subset=["latitude", "longitude"]).drop_duplicates(subset=["name","latitude","longitude"])
     decisions["rows_removed"] = int(before - len(df))
 
-    # Defaults
     if "rating" not in df.columns:
         df["rating"] = 4.0
         decisions["rating_filled_default"] = 4.0
@@ -84,12 +77,12 @@ def clean_and_standardize(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str
     else:
         df["est_time_min"] = pd.to_numeric(df["est_time_min"], errors="coerce").fillna(60.0)
 
-    # Normalizações simples
+  
     df["rating"] = df["rating"].clip(0, 5)
     df["price_level"] = df["price_level"].clip(lower=0)
     df["est_time_min"] = df["est_time_min"].clip(lower=5)
 
-    # Reindex simples e id
+  
     df = df.reset_index(drop=True)
     df.insert(0, "poi_id", np.arange(1, len(df)+1))  # reserva 0 para o hotel
     return df, decisions
@@ -107,13 +100,13 @@ def build_distance_time_matrices(df: pd.DataFrame,
     ], ignore_index=True)
 
     n = len(points)
-    D = np.zeros((n, n), dtype=float)  # metros
+    D = np.zeros((n, n), dtype=float)  
     for i in range(n):
         D[i, :] = haversine_m(points.loc[i, "latitude"], points.loc[i, "longitude"],
                               points["latitude"].values, points["longitude"].values)
 
     speed_mps = (speed_kmh * 1000.0) / 3600.0
-    T = (D / speed_mps) / 60.0  # minutos
+    T = (D / speed_mps) / 60.0  
 
     return D, T, points
 

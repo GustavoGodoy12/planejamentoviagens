@@ -1,4 +1,4 @@
-# download_kaggle.py
+
 import os, glob, shutil
 import kagglehub
 
@@ -12,7 +12,7 @@ print("Baixando dataset do Kaggle (isso pode levar alguns segundos)...")
 path = kagglehub.dataset_download(DATASET)
 print("Arquivos baixados em:", path)
 
-# Procura por um CSV plausível dentro da pasta baixada
+
 csv_candidates = []
 for pattern in ("*.csv", "*/*.csv", "*/*/*.csv"):
     csv_candidates.extend(glob.glob(os.path.join(path, pattern)))
